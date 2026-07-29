@@ -29,7 +29,7 @@ const userSchema = new mongoose.Schema(
 
         status: {
             type: String,
-            enum: ["online", "offline", "in-call"],
+            enum: ["online", "offline", "in-meeting"],
             default: "offline",
         },
 

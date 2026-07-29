@@ -12,6 +12,7 @@ import Call from "@/pages/Call";
 import Meeting from "@/pages/Meeting";
 import History from "@/pages/History";
 import NotFound from "@/pages/NotFound";
+import DashboardLayout from "@/layouts/DashboardLayout";
 
 export default function AppRoutes() {
     return (
@@ -27,10 +28,12 @@ export default function AppRoutes() {
                 </Route>
 
                 <Route element={<ProtectedRoute />}>
-                    <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/call" element={<Call />} />
-                    <Route path="/meeting" element={<Meeting />} />
-                    <Route path="/history" element={<History />} />
+                    <Route element={<DashboardLayout />}>
+                        <Route path="/dashboard" element={<Dashboard />} />
+                        <Route path="/call" element={<Call />} />
+                        <Route path="/meeting/:meetingCode" element={<Meeting />} />
+                        <Route path="/history" element={<History />} />
+                    </Route>
                 </Route>
 
                 <Route path="*" element={<NotFound />} />
