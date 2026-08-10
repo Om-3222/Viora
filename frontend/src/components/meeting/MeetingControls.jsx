@@ -1,29 +1,58 @@
-import { Mic, MicOff, Video, VideoOff, PhoneOff } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff, PhoneOff, MessageSquare, MonitorUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-export default function MeetingControls({ isMicOn, isCameraOn, toggleMic, toggleCamera, onLeave }) {
+export default function MeetingControls({
+    isMicOn,
+    isCameraOn,
+    isChatOpen,
+    toggleMic,
+    toggleCamera,
+    toggleChat,
+    onLeave,
+    onShareScreen
+}) {
     return (
         <div className="flex items-center justify-center gap-5 border-t bg-background p-5">
 
-            <button
+            <Button
+                variant="outline"
+                size="xl"
                 onClick={toggleMic}
-                className="rounded-full bg-muted p-4 transition hover:scale-105"
             >
                 {isMicOn ? <Mic /> : <MicOff />}
-            </button>
+            </Button>
 
-            <button
+            <Button
+                variant="outline"
+                size="xl"
                 onClick={toggleCamera}
-                className="rounded-full bg-muted p-4 transition hover:scale-105"
             >
                 {isCameraOn ? <Video /> : <VideoOff />}
-            </button>
+            </Button>
 
-            <button
+            <Button
+                variant="outline"
+                size="xl"
+                onClick={onShareScreen}
+            >
+                <MonitorUp />
+            </Button>
+
+            <Button
+                variant={isChatOpen ? "default" : "outline"}
+                size="xl"
+                onClick={toggleChat}
+            >
+                <MessageSquare />
+            </Button>
+
+            <Button
+                variant="destructive"
+                size="xl"
                 onClick={onLeave}
-                className="rounded-full bg-red-500 p-4 text-white transition hover:scale-105"
             >
                 <PhoneOff />
-            </button>
+            </Button>
 
         </div>
     );

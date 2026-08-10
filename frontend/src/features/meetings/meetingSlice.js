@@ -36,6 +36,16 @@ export const fetchMeetingThunk = createAsyncThunk(
     }
 );
 
+// participants = [
+//     {
+//         userId,
+//         socketId,
+//         name,
+//         mic: true,
+//         camera: true,
+//     }
+// ]
+
 const initialState = {
     meeting: null,
 
@@ -59,7 +69,16 @@ const meetingSlice = createSlice({
         },
 
         setParticipants: (state, action) => {
-            state.participants = action.payload;
+            state.participants = action.payload.map((participant) => ({
+                ...participant,
+                mic: participant.mic ?? true,
+                camera: participant.camera ?? true,
+            }));
+        },
+        removeParticipant: (state, action) => {
+            state.participants = state.participants.filter(
+                (participant) => participant.socketId !== action.payload
+            );
         },
     },
 
@@ -98,7 +117,7 @@ const meetingSlice = createSlice({
 });
 
 export const {
-    clearMeeting, setParticipants
+    clearMeeting, setParticipants, removeParticipant
 } = meetingSlice.actions;
 
 export default meetingSlice.reducer;

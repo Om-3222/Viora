@@ -78,6 +78,9 @@ export default function useWebRTC(stream, onIceCandidate) {
 
         addLocalTracks(pc, socketId);
 
+        // ICE - Interactive Connectivity Establishment
+        // this is used to find the best way to connect two peers
+        // on ICE candidate event listner 
         pc.onicecandidate = (event) => {
             if (!event.candidate) {
                 console.log("No ICE candidate");
@@ -96,11 +99,23 @@ export default function useWebRTC(stream, onIceCandidate) {
             );
 
             const stream = event.streams[0];
+            const track = event.track;
 
             setRemoteStreams((prev) => {
                 const updated = new Map(prev);
+                const currentData = updated.get(socketId) || { cameraStream: null, screenStream: null };
 
-                updated.set(socketId, stream);
+                if (track.kind === "video") {
+                    if (!currentData.cameraStream) {
+                        currentData.cameraStream = stream;
+                    } else if (currentData.cameraStream.id !== stream.id) {
+                        currentData.screenStream = stream;
+                    }
+                } else if (track.kind === "audio") {
+                    currentData.cameraStream = stream;
+                }
+
+                updated.set(socketId, currentData);
 
                 return updated;
             });
@@ -127,6 +142,7 @@ export default function useWebRTC(stream, onIceCandidate) {
     }, []);
 
     const createOffer = async (socketId) => {
+        // 1st check if peer connection already exists, if not then create it.
         let pc = getPeerConnection(socketId);
 
         if (!pc) {
@@ -148,9 +164,13 @@ export default function useWebRTC(stream, onIceCandidate) {
             pc.signalingState
         );
 
+        // this is current user offer
+        // offer consists of sdp, and ice candidates
+        // (optional, but they will be sent later in onicecandidate event handler)
         const offer = await pc.createOffer();
 
         await pc.setLocalDescription(offer);
+        // ICE gets triggered here on pc.setLocalDescription() or pc.setRemoteDescription()
 
         console.log(
             "State after local offer: ",
@@ -167,10 +187,12 @@ export default function useWebRTC(stream, onIceCandidate) {
             pc = createPeerConnection(socketId);
         }
 
+        // sdp remote description from user 1
         await pc.setRemoteDescription(
             new RTCSessionDescription(offer)
         );
 
+        // sdp remote description from user 2(current user)
         const answer = await pc.createAnswer();
 
         await pc.setLocalDescription(answer);
@@ -199,6 +221,7 @@ export default function useWebRTC(stream, onIceCandidate) {
             return;
         }
 
+        // sdp remote description of user 2 (current user)
         await pc.setRemoteDescription(
             new RTCSessionDescription(answer)
         );
@@ -231,7 +254,40 @@ export default function useWebRTC(stream, onIceCandidate) {
         }
     };
 
+    const replaceVideoTrack = (newTrack) => {
+        peerConnections.current.forEach((pc) => {
+            const sender = pc
+                .getSenders()
+                .find((s) => s.track?.kind === "video");
+
+            if (sender) {
+                sender.replaceTrack(newTrack);
+            }
+        })
+    }
+
+    const addScreenTrack = (screenTrack, screenStream) => {
+        peerConnections.current.forEach((pc) => {
+            pc.addTrack(screenTrack, screenStream);
+        });
+    };
+
+    const removeScreenTrack = (screenTrack) => {
+        peerConnections.current.forEach((pc) => {
+            const sender = pc
+                .getSenders()
+                .find((s) => s.track === screenTrack);
+
+            if (sender) {
+                pc.removeTrack(sender);
+            }
+        });
+    };
+
     return {
+        replaceVideoTrack,
+        addScreenTrack,
+        removeScreenTrack,
         createOffer,
         handleOffer,
         handleAnswer,

@@ -1,21 +1,26 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 
-import { SidebarProvider } from "@/components/ui/sidebar";
-import AppSidebar from "@/components/dashboard/AppSidebar";
 import Topbar from "@/components/dashboard/Topbar";
 
 export default function DashboardLayout() {
-    return (
-        <SidebarProvider>
-            <AppSidebar />
+    const location = useLocation();
+    const isMeetingPage = location.pathname.startsWith("/meeting/");
 
-            <main className="flex min-h-screen flex-1 flex-col">
-                <Topbar />
-
-                <div className="flex-1 p-6">
-                    <Outlet />
-                </div>
+    if (isMeetingPage) {
+        return (
+            <main className="flex h-screen w-screen flex-col bg-background overflow-hidden">
+                <Outlet />
             </main>
-        </SidebarProvider>
+        );
+    }
+
+    return (
+        <div className="flex h-screen w-screen flex-col bg-background overflow-hidden">
+            <Topbar />
+
+            <main className="flex-1 p-6 min-h-0 overflow-y-auto no-scrollbar">
+                <Outlet />
+            </main>
+        </div>
     );
 }

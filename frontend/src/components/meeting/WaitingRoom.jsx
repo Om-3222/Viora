@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import VideoTile from "./VideoTile";
+import MeetingCodeDisplay from "./MeetingCodeDisplay";
 
 export default function WaitingRoom({ meeting, localStream, onJoin }) {
 
@@ -24,9 +25,7 @@ export default function WaitingRoom({ meeting, localStream, onJoin }) {
                             Meeting Code
                         </p>
 
-                        <div className="mt-2 rounded-xl border p-4 text-xl font-semibold">
-                            {meeting.meetingCode}
-                        </div>
+                        <MeetingCodeDisplay code={meeting.meetingCode} className="mt-2" />
 
                         <Button
                             size="lg"

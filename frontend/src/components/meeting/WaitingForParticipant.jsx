@@ -1,4 +1,5 @@
 import { UserRound } from "lucide-react";
+import MeetingCodeDisplay from "./MeetingCodeDisplay";
 
 export default function WaitingForParticipant({ meetingCode }) {
     return (
@@ -16,9 +17,7 @@ export default function WaitingForParticipant({ meetingCode }) {
                 Share this meeting code
             </p>
 
-            <div className="mt-6 rounded-lg border bg-background px-6 py-3 text-xl font-mono tracking-widest">
-                {meetingCode}
-            </div>
+            <MeetingCodeDisplay code={meetingCode} className="mt-6" />
         </div>
     );
 }
