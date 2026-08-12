@@ -11,3 +11,9 @@ export const getMeeting = async (meetingCode) => {
 
     return response.data.meeting;
 };
+
+export const getRecentMeetings = async () => {
+    const response = await api.get("/meetings/recent");
+
+    return response.data.meetings;
+};

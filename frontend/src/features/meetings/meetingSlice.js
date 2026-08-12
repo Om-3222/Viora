@@ -6,6 +6,7 @@ import {
 import {
     createMeeting,
     getMeeting,
+    getRecentMeetings,
 } from "./meetingService";
 
 export const createMeetingThunk = createAsyncThunk(
@@ -36,6 +37,20 @@ export const fetchMeetingThunk = createAsyncThunk(
     }
 );
 
+export const fetchRecentMeetingsThunk = createAsyncThunk(
+    "meeting/fetchRecent",
+    async (_, thunkAPI) => {
+        try {
+            return await getRecentMeetings();
+        } catch (error) {
+            return thunkAPI.rejectWithValue(
+                error.response?.data?.message ||
+                "Failed to fetch recent meetings."
+            );
+        }
+    }
+);
+
 // participants = [
 //     {
 //         userId,
@@ -50,6 +65,8 @@ const initialState = {
     meeting: null,
 
     participants: [],
+
+    recentMeetings: [],
 
     isLoading: false,
 
@@ -110,6 +127,17 @@ const meetingSlice = createSlice({
             })
 
             .addCase(fetchMeetingThunk.rejected, (state, action) => {
+                state.isLoading = false;
+                state.error = action.payload;
+            })
+            .addCase(fetchRecentMeetingsThunk.pending, (state) => {
+                state.isLoading = true;
+            })
+            .addCase(fetchRecentMeetingsThunk.fulfilled, (state, action) => {
+                state.isLoading = false;
+                state.recentMeetings = action.payload;
+            })
+            .addCase(fetchRecentMeetingsThunk.rejected, (state, action) => {
                 state.isLoading = false;
                 state.error = action.payload;
             });

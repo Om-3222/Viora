@@ -1,4 +1,5 @@
-import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
+import { buttonVariants } from "@/components/ui/button-variants";
 
 export default function Hero() {
     return (
@@ -12,9 +13,9 @@ export default function Hero() {
                 and group communication with real-time chat and file sharing.
             </p>
 
-            <Button size="lg">
+            <Link to="/login" className={buttonVariants({ size: "lg" })}>
                 Get Started
-            </Button>
+            </Link>
         </section>
     );
 }

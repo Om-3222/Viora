@@ -62,3 +62,27 @@ export const getMeeting = async (req, res) => {
         });
     }
 };
+
+export const getRecentMeetings = async (req, res) => {
+    try {
+        const meetings = await Meeting.find({
+            $or: [
+                { host: req.user._id },
+                { participants: req.user._id }
+            ]
+        })
+        .populate("host", "name email avatar")
+        .sort({ updatedAt: -1 })
+        .limit(10);
+
+        res.status(200).json({
+            meetings,
+        });
+    } catch (error) {
+        console.error("Get Recent Meetings Error:", error);
+
+        res.status(500).json({
+            message: "Internal Server Error",
+        });
+    }
+};

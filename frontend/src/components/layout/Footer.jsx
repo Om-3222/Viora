@@ -50,21 +50,18 @@ export default function Footer() {
 
                         <div className="flex gap-4">
                             <a
-                                href="#"
+                                href="https://mail.google.com/mail/?view=cm&fs=1&to=omshringari3222@gmail.com"
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="rounded-lg border p-3 transition hover:border-primary hover:text-primary"
                             >
-                                GitHub
+                                Gmail
                             </a>
 
                             <a
-                                href="#"
-                                className="rounded-lg border p-3 transition hover:border-primary hover:text-primary"
-                            >
-                                Twitter
-                            </a>
-
-                            <a
-                                href="#"
+                                href="https://in.linkedin.com/in/om-shringari"
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="rounded-lg border p-3 transition hover:border-primary hover:text-primary"
                             >
                                 LinkedIn

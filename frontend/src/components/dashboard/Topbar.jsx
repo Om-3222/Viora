@@ -1,9 +1,23 @@
-import { useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { useSelector, useDispatch } from "react-redux";
+import { Link, useNavigate } from "react-router-dom";
 import ThemeToggle from "@/components/common/ThemeToggle";
+import { logoutUser } from "@/features/auth/authService";
+import { clearUser } from "@/features/auth/authSlice";
 
 export default function Topbar() {
     const { user } = useSelector((state) => state.auth);
+    const dispatch = useDispatch();
+    const navigate = useNavigate();
+
+    const handleLogout = async () => {
+        try {
+            await logoutUser();
+            dispatch(clearUser());
+            navigate("/login");
+        } catch (error) {
+            console.error("Logout failed:", error);
+        }
+    };
 
     return (
         <header className="flex h-16 items-center justify-between border-b px-6">
@@ -31,6 +45,12 @@ export default function Topbar() {
                             >
                                 Profile
                             </Link>
+                            <button
+                                onClick={handleLogout}
+                                className="flex w-full items-center rounded-md px-2.5 py-1.5 text-sm transition-colors hover:bg-muted text-left cursor-pointer"
+                            >
+                                Sign Out
+                            </button>
                         </div>
                     </div>
                 </div>

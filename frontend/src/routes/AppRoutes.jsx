@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
+import ScrollToTop from "@/components/common/ScrollToTop";
 import MainLayout from "@/layouts/MainLayout";
 import AuthLayout from "@/layouts/AuthLayout";
 import ProtectedRoute from "./ProtectedRoute";
@@ -17,6 +18,7 @@ import DashboardLayout from "@/layouts/DashboardLayout";
 export default function AppRoutes() {
     return (
         <BrowserRouter>
+            <ScrollToTop />
             <Routes>
                 <Route element={<MainLayout />}>
                     <Route path="/" element={<Home />} />

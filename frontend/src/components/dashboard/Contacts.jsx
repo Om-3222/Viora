@@ -45,7 +45,7 @@ export default function Contacts() {
                 </h2>
             </div>
 
-            <div className="divide-y">
+            <div className="divide-y overflow-y-auto h-[400px] no-scrollbar">
                 {users.map((user) => {
                     const isOnline = onlineUserSet.has(user._id);
 

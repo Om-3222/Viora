@@ -23,7 +23,7 @@ export default function NewMeetingCard() {
     };
 
     return (
-        <section className="rounded-3xl border bg-card px-10 py-16">
+        <section className="rounded-3xl border bg-card mx-18 px-10 py-16">
             <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
                 <div className="mb-8 rounded-full bg-primary/10 p-6">
                     <Video className="h-12 w-12 text-primary" />

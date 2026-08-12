@@ -1,5 +1,6 @@
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
+import Meeting from "../models/meeting.model.js";
 
 /*
 meetingParticipants
@@ -33,6 +34,12 @@ export default function registerMeetingEvents(io, socket) {
             const user = await User.findById(userId).select("name");
 
             if (!user) return;
+
+            // Add the user to the meeting's participants array in the database
+            await Meeting.updateOne(
+                { meetingCode: meetingCode.toUpperCase() },
+                { $addToSet: { participants: userId } }
+            );
 
             // if meeting does not exist, create a new meeting map
             if (!meetingParticipants.has(meetingCode)) {

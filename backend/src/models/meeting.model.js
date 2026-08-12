@@ -21,6 +21,13 @@ const meetingSchema = new mongoose.Schema(
             enum: ["waiting", "active", "ended"],
             default: "waiting",
         },
+
+        participants: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "User",
+            },
+        ],
     },
     {
         timestamps: true,

@@ -2,10 +2,8 @@ import { useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { fetchUsers } from "@/features/users/usersSlice";
 import Contacts from "@/components/dashboard/Contacts";
-import { useSelector } from "react-redux";
 import NewMeetingCard from "@/components/dashboard/NewMeetingCard";
-import RecentCalls from "@/components/dashboard/RecentCalls";
-import ScheduledMeetings from "@/components/dashboard/ScheduledMeetings";
+import RecentMeetings from "@/components/dashboard/RecentMeetings";
 
 
 
@@ -17,10 +15,8 @@ export default function Dashboard() {
         dispatch(fetchUsers());
     }, [dispatch]);
 
-    const { users } = useSelector((state) => state.users);
-
     return (
-        <div className="space-y-12">
+        <div className="space-y-12 px-18">
             <section>
                 <h1 className="text-4xl font-bold tracking-tight">
                     Welcome to VIORA
@@ -33,12 +29,10 @@ export default function Dashboard() {
 
             <NewMeetingCard />
 
-            <div className="grid gap-8 lg:grid-cols-3">
+            <div className="grid gap-16 lg:grid-cols-2">
                 <Contacts />
 
-                <RecentCalls />
-
-                <ScheduledMeetings />
+                <RecentMeetings />
             </div>
         </div>
     );
