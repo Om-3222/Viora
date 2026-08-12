@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useDispatch } from "react-redux";
 import { useNavigate, Link } from "react-router-dom";
+import { Eye, EyeOff } from "lucide-react";
 
 import { registerSchema } from "@/features/auth/authSchema";
 import { registerUser } from "@/features/auth/authService";
@@ -13,6 +15,7 @@ import { Input } from "@/components/ui/input";
 export default function Register() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
+    const [showPassword, setShowPassword] = useState(false);
 
     const {
         register,
@@ -63,16 +66,28 @@ export default function Register() {
                     </p>
                 </div>
 
-                <div>
+                <div className="relative">
                     <Input
+                        type={showPassword ? "text" : "password"}
                         placeholder="Password"
-                        type="password"
+                        className="pr-10"
                         {...register("password")}
                     />
-                    <p className="mt-1 text-sm text-red-500">
-                        {errors.password?.message}
-                    </p>
+                    <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
+                    >
+                        {showPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                        ) : (
+                            <Eye className="h-4 w-4" />
+                        )}
+                    </button>
                 </div>
+                <p className="mt-1 text-sm text-red-500">
+                    {errors.password?.message}
+                </p>
 
                 <Button
                     type="submit"
