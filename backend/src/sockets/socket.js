@@ -7,7 +7,7 @@ let io;
 export const initializeSocket = (server) => {
     io = new Server(server, {
         cors: {
-            origin: ["http://localhost:5173", "http://localhost:4173"],
+            origin: ["http://localhost:5173", "http://localhost:4173", "https://viora-1.vercel.app"],
             credentials: true,
         },
     });
