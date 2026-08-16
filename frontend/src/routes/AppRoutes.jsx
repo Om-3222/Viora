@@ -14,6 +14,7 @@ import Meeting from "@/pages/Meeting";
 import History from "@/pages/History";
 import NotFound from "@/pages/NotFound";
 import DashboardLayout from "@/layouts/DashboardLayout";
+import Profile from "@/pages/Profile";
 
 export default function AppRoutes() {
     return (
@@ -35,6 +36,7 @@ export default function AppRoutes() {
                         <Route path="/call" element={<Call />} />
                         <Route path="/meeting/:meetingCode" element={<Meeting />} />
                         <Route path="/history" element={<History />} />
+                        <Route path="/profile" element={<Profile />} />
                     </Route>
                 </Route>
 

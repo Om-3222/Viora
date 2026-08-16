@@ -49,7 +49,7 @@ export default function Meeting() {
         handleAnswer,
         handleIceCandidate,
         removePeerConnection,
-        remoteStreams,
+        remoteStream,
         addScreenTrack,
         removeScreenTrack
     } = useWebRTC(stream,
@@ -61,6 +61,7 @@ export default function Meeting() {
         }
     );
 
+    // Emits the initial event to join the room
     const handleJoinMeeting = () => {
         if (hasJoined) return;
 
@@ -96,6 +97,7 @@ export default function Meeting() {
         });
     };
 
+    // Toggles screen sharing. If active, it replaces the track with the screen, otherwise reverts to camera
     const startScreenShare = async () => {
         if (isScreenSharing) {
             if (localScreenStream) {
@@ -114,15 +116,15 @@ export default function Meeting() {
                 screen: false
             });
 
-            const remoteParticipants = participantsRef.current.filter(
+            const remoteParticipant = participantsRef.current.find(
                 (p) => p.userId !== currentUserRef.current?._id
             );
 
-            for (const participant of remoteParticipants) {
-                const offer = await createOffer(participant.socketId);
+            if (remoteParticipant) {
+                const offer = await createOffer(remoteParticipant.socketId);
                 if (offer) {
                     socket.emit("webrtc:offer", {
-                        targetSocketId: participant.socketId,
+                        targetSocketId: remoteParticipant.socketId,
                         offer,
                     });
                 }
@@ -148,15 +150,15 @@ export default function Meeting() {
                 screen: true
             });
 
-            const remoteParticipants = participantsRef.current.filter(
+            const remoteParticipant = participantsRef.current.find(
                 (p) => p.userId !== currentUserRef.current?._id
             );
 
-            for (const participant of remoteParticipants) {
-                const offer = await createOffer(participant.socketId);
+            if (remoteParticipant) {
+                const offer = await createOffer(remoteParticipant.socketId);
                 if (offer) {
                     socket.emit("webrtc:offer", {
-                        targetSocketId: participant.socketId,
+                        targetSocketId: remoteParticipant.socketId,
                         offer,
                     });
                 }
@@ -174,15 +176,15 @@ export default function Meeting() {
                     screen: false
                 });
 
-                const remoteParticipants = participantsRef.current.filter(
+                const remoteParticipant = participantsRef.current.find(
                     (p) => p.userId !== currentUserRef.current?._id
                 );
 
-                for (const participant of remoteParticipants) {
-                    const offer = await createOffer(participant.socketId);
+                if (remoteParticipant) {
+                    const offer = await createOffer(remoteParticipant.socketId);
                     if (offer) {
                         socket.emit("webrtc:offer", {
-                            targetSocketId: participant.socketId,
+                            targetSocketId: remoteParticipant.socketId,
                             offer,
                         });
                     }
@@ -205,16 +207,22 @@ export default function Meeting() {
             dispatch(setParticipants(participants));
         });
 
+        socket.on("meeting:error", ({ message }) => {
+            alert(message);
+            setHasJoined(false);
+        });
+
         return () => {
             socket.off("meeting:participants");
+            socket.off("meeting:error");
         };
     }, [dispatch]);
 
+    // Initiates connection when another participant is ready or joins
     useEffect(() => {
         socket.on("meeting:ready", async ({ joinedSocketId } = {}) => {
             if (joinedSocketId) {
                 // it is like a new person joined a community and the people already in the community offer to welcome him  
-
 
                 const offer = await createOffer(joinedSocketId);
 
@@ -225,16 +233,16 @@ export default function Meeting() {
                     });
                 }
             } else {
-                const remoteParticipants = participantsRef.current.filter(
+                const remoteParticipant = participantsRef.current.find(
                     participant => participant.userId !== currentUserRef.current?._id
                 );
 
-                for (const participant of remoteParticipants) {
-                    const offer = await createOffer(participant.socketId);
+                if (remoteParticipant) {
+                    const offer = await createOffer(remoteParticipant.socketId);
 
                     if (offer) {
                         socket.emit("webrtc:offer", {
-                            targetSocketId: participant.socketId,
+                            targetSocketId: remoteParticipant.socketId,
                             offer,
                         });
                     }
@@ -247,6 +255,7 @@ export default function Meeting() {
         }
     }, [createOffer])
 
+    // Handles receiving an offer and replying with an answer
     useEffect(() => {
         socket.on("webrtc:offer", async ({ senderSocketId, offer }) => {
             console.log("Received Offer");
@@ -264,20 +273,15 @@ export default function Meeting() {
         };
     }, [handleOffer]);
 
+    // Finishes connection by saving the remote peer's answer
     useEffect(() => {
         socket.on(
             "webrtc:answer",
             async ({ senderSocketId, answer }) => {
                 console.log("Received Answer.");
+                console.log("Received answer from:", senderSocketId, Date.now());
 
-                console.log(
-                    "Received answer from:",
-                    senderSocketId,
-                    Date.now()
-                );
-
-
-                await handleAnswer(senderSocketId, answer);
+                await handleAnswer(answer);
             }
         )
 
@@ -286,11 +290,12 @@ export default function Meeting() {
         }
     }, [handleAnswer])
 
+    // Handles receiving ICE candidates to complete the P2P connection path
     useEffect(() => {
         socket.on("webrtc:ice", async ({ senderSocketId, candidate }) => {
             console.log("received ICE");
 
-            await handleIceCandidate(senderSocketId, candidate);
+            await handleIceCandidate(candidate);
         })
 
         return () => {
@@ -346,13 +351,14 @@ export default function Meeting() {
         };
     }, []);
 
+    // Cleans up the state when a participant leaves
     useEffect(() => {
         // if we write socket.on("meeting:participant-left", removePeerConnection(socketId));
         // it will give error because removePeerConnection is not a callback function
         // it will get executed immediately. 
         // it will not wait for the participant to leave.
         const handleParticipantLeft = ({ socketId }) => {
-            removePeerConnection(socketId);
+            removePeerConnection();
             dispatch(removeParticipant(socketId));
         }
 
@@ -391,7 +397,7 @@ export default function Meeting() {
             messages={messages}
             onSendMessage={sendMessage}
             onLoadOlderMessages={loadOlderMessages}
-            remoteStreams={remoteStreams}
+            remoteStream={remoteStream}
             participants={participants}
             localStream={stream}
             currentUser={currentUser}

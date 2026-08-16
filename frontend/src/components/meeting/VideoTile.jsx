@@ -21,9 +21,8 @@ export default function VideoTile({
     }, [stream]);
 
     return (
-        <div className={`group relative overflow-hidden rounded-3xl bg-zinc-900 transition-all duration-300 m-auto ${
-            isFullscreen ? "w-full h-full" : "aspect-video max-h-full max-w-full"
-        }`}>
+        <div className={`group relative overflow-hidden rounded-3xl bg-zinc-900 transition-all duration-300 m-auto ${isFullscreen ? "aspect-video w-3/4 max-h-full" : "aspect-video max-h-full max-w-full"
+            }`}>
 
             <video
                 ref={videoRef}

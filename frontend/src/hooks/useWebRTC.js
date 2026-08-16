@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
 export default function useWebRTC(stream, onIceCandidate) {
-    const [remoteStreams, setRemoteStreams] = useState(new Map());
+    const [remoteStream, setRemoteStream] = useState({ cameraStream: null, screenStream: null });
 
-    const peerConnections = useRef(new Map()); // socketId -> RTCPeerConnection
+    const peerConnection = useRef(null);
+    const iceCandidateQueue = useRef([]);
 
-    const getPeerConnection = (socketId) => {
-        return peerConnections.current.get(socketId);
-    };
-
-    const removePeerConnection = (socketId) => {
-        const pc = peerConnections.current.get(socketId);
+    // Cleans up the WebRTC connection when leaving a meeting or ending a call
+    const removePeerConnection = () => {
+        const pc = peerConnection.current;
 
         if (!pc) return;
 
@@ -18,20 +16,15 @@ export default function useWebRTC(stream, onIceCandidate) {
             pc.close();
         }
 
-        peerConnections.current.delete(socketId);
+        peerConnection.current = null;
+        iceCandidateQueue.current = [];
 
-        setRemoteStreams((prev) => {
-            const updated = new Map(prev);
+        setRemoteStream({ cameraStream: null, screenStream: null });
 
-            updated.delete(socketId);
-
-            return updated;
-        });
-
-        console.log("Peerconnection removed: ", socketId);
+        console.log("Peerconnection removed");
     };
 
-    const addLocalTracks = (pc, socketId) => {
+    const addLocalTracks = (pc) => {
         if (!stream) return;
 
         stream.getTracks().forEach((track) => {
@@ -53,8 +46,7 @@ export default function useWebRTC(stream, onIceCandidate) {
         );
 
         console.log(
-            "Local tracks sent to",
-            socketId,
+            "Local tracks sent",
             pc.getSenders().map(sender => ({
                 kind: sender.track?.kind,
                 enabled: sender.track?.enabled,
@@ -63,7 +55,8 @@ export default function useWebRTC(stream, onIceCandidate) {
         );
     };
 
-    const createPeerConnection = (socketId) => {
+    // Initializes a new RTCPeerConnection for the target peer
+    const createPeerConnection = (targetSocketId) => {
         const pc = new RTCPeerConnection({
             iceServers: [
                 {
@@ -72,38 +65,32 @@ export default function useWebRTC(stream, onIceCandidate) {
             ],
         });
 
-        peerConnections.current.set(socketId, pc);
+        peerConnection.current = pc;
 
-        console.log("peer connection created: ", socketId);
+        console.log("peer connection created for: ", targetSocketId);
 
-        addLocalTracks(pc, socketId);
+        addLocalTracks(pc);
 
-        // ICE - Interactive Connectivity Establishment
-        // this is used to find the best way to connect two peers
-        // on ICE candidate event listner 
         pc.onicecandidate = (event) => {
             if (!event.candidate) {
                 console.log("No ICE candidate");
                 return;
             }
 
-            console.log("ICE Candidate");
+            console.log("ICE Candidate generated");
 
-            onIceCandidate?.(socketId, event.candidate);
+            onIceCandidate?.(targetSocketId, event.candidate);
         };
 
+        // Fired when the remote peer adds tracks (e.g. video, audio, screen share)
         pc.ontrack = (event) => {
-            console.log(
-                "Remote Stream Received",
-                socketId
-            );
+            console.log("Remote Stream Received from", targetSocketId);
 
             const stream = event.streams[0];
             const track = event.track;
 
-            setRemoteStreams((prev) => {
-                const updated = new Map(prev);
-                const currentData = updated.get(socketId) || { cameraStream: null, screenStream: null };
+            setRemoteStream((prev) => {
+                const currentData = { ...prev };
 
                 if (track.kind === "video") {
                     if (!currentData.cameraStream) {
@@ -115,9 +102,7 @@ export default function useWebRTC(stream, onIceCandidate) {
                     currentData.cameraStream = stream;
                 }
 
-                updated.set(socketId, currentData);
-
-                return updated;
+                return currentData;
             });
         };
 
@@ -125,28 +110,43 @@ export default function useWebRTC(stream, onIceCandidate) {
     };
 
     useEffect(() => {
-        if (!stream) return;
-
-        peerConnections.current.forEach((pc) => {
-            addLocalTracks(pc);
-        });
-
-        console.log("Added tracks to existing peer connections");
+        if (!stream || !peerConnection.current) return;
+        addLocalTracks(peerConnection.current);
+        console.log("Added tracks to existing peer connection");
     }, [stream]);
 
     useEffect(() => {
         return () => {
-            peerConnections.current.forEach((pc) => pc.close());
-            peerConnections.current.clear();
+            if (peerConnection.current) {
+                peerConnection.current.close();
+                peerConnection.current = null;
+            }
+            iceCandidateQueue.current = [];
         }
     }, []);
 
-    const createOffer = async (socketId) => {
-        // 1st check if peer connection already exists, if not then create it.
-        let pc = getPeerConnection(socketId);
+    // Processes any ICE candidates that were received before the remote description was set
+    const flushIceCandidateQueue = async (pc) => {
+        const queue = iceCandidateQueue.current;
+        if (queue && queue.length > 0) {
+            console.log(`Flushing ${queue.length} ICE candidates`);
+            for (const candidate of queue) {
+                try {
+                    await pc.addIceCandidate(candidate);
+                } catch (error) {
+                    console.error("Error adding queued ICE candidate", error);
+                }
+            }
+            iceCandidateQueue.current = [];
+        }
+    };
+
+    // Initiates the connection by creating and sending an offer to a peer
+    const createOffer = async (targetSocketId) => {
+        let pc = peerConnection.current;
 
         if (!pc) {
-            pc = createPeerConnection(socketId);
+            pc = createPeerConnection(targetSocketId);
         }
 
         if (pc.signalingState !== "stable") {
@@ -157,131 +157,94 @@ export default function useWebRTC(stream, onIceCandidate) {
             return;
         }
 
-        console.log(
-            "Creating offer for:",
-            socketId,
-            "Current state:",
-            pc.signalingState
-        );
+        console.log("Creating offer for:", targetSocketId, "Current state:", pc.signalingState);
 
-        // this is current user offer
-        // offer consists of sdp, and ice candidates
-        // (optional, but they will be sent later in onicecandidate event handler)
         const offer = await pc.createOffer();
-
         await pc.setLocalDescription(offer);
-        // ICE gets triggered here on pc.setLocalDescription() or pc.setRemoteDescription()
 
-        console.log(
-            "State after local offer: ",
-            pc.signalingState
-        );
+        console.log("State after local offer: ", pc.signalingState);
 
         return offer;
     }
 
-    const handleOffer = async (socketId, offer) => {
-        let pc = getPeerConnection(socketId);
+    // Handles an incoming offer by setting the remote description and creating an answer
+    const handleOffer = async (targetSocketId, offer) => {
+        let pc = peerConnection.current;
 
         if (!pc) {
-            pc = createPeerConnection(socketId);
+            pc = createPeerConnection(targetSocketId);
         }
 
-        // sdp remote description from user 1
-        await pc.setRemoteDescription(
-            new RTCSessionDescription(offer)
-        );
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-        // sdp remote description from user 2(current user)
+        await flushIceCandidateQueue(pc);
+
         const answer = await pc.createAnswer();
-
         await pc.setLocalDescription(answer);
 
-        console.log(
-            "State after local answer: ",
-            pc.signalingState
-        );
+        console.log("State after local answer: ", pc.signalingState);
 
         return answer;
     }
 
-    const handleAnswer = async (socketId, answer) => {
-        const pc = getPeerConnection(socketId);
+    // Finalizes the connection process by setting the remote description from the answer
+    const handleAnswer = async (answer) => {
+        const pc = peerConnection.current;
 
         if (!pc) {
-            console.error("Peer connection not found", socketId);
+            console.error("Peer connection not found");
             return;
         }
 
         if (pc.signalingState !== "have-local-offer") {
-            console.warn(
-                "Ignoring answer. Expected 'have-local-offer' but got:",
-                pc.signalingState
-            );
+            console.warn("Ignoring answer. Expected 'have-local-offer' but got:", pc.signalingState);
             return;
         }
 
-        // sdp remote description of user 2 (current user)
-        await pc.setRemoteDescription(
-            new RTCSessionDescription(answer)
-        );
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
 
-        console.log("Remote answer applied:", socketId);
+        await flushIceCandidateQueue(pc);
+
+        console.log("Remote answer applied");
     };
 
-    const handleIceCandidate = async (socketId, candidate) => {
-        const pc = getPeerConnection(socketId);
+    // Handles incoming ICE candidates to help peers find the best route
+    const handleIceCandidate = async (candidate) => {
+        const pc = peerConnection.current;
+        const rtcCandidate = new RTCIceCandidate(candidate);
 
-        if (!pc) {
-            console.error(
-                "PeerConnection not found",
-                socketId
-            );
+        if (!pc || !pc.remoteDescription) {
+            console.log("PeerConnection not ready or remote description missing, queueing ICE candidate");
+            iceCandidateQueue.current.push(rtcCandidate);
             return;
         }
 
         try {
-            await pc.addIceCandidate(
-                new RTCIceCandidate(candidate)
-            );
-
-            console.log(
-                "ICE candidate added: ",
-                socketId
-            );
+            await pc.addIceCandidate(rtcCandidate);
+            console.log("ICE candidate added");
         } catch (error) {
-            console.error(error);
+            console.error("Error adding ICE candidate:", error);
         }
     };
 
     const replaceVideoTrack = (newTrack) => {
-        peerConnections.current.forEach((pc) => {
-            const sender = pc
-                .getSenders()
-                .find((s) => s.track?.kind === "video");
-
-            if (sender) {
-                sender.replaceTrack(newTrack);
-            }
-        })
+        const pc = peerConnection.current;
+        if (!pc) return;
+        const sender = pc.getSenders().find((s) => s.track?.kind === "video");
+        if (sender) sender.replaceTrack(newTrack);
     }
 
     const addScreenTrack = (screenTrack, screenStream) => {
-        peerConnections.current.forEach((pc) => {
-            pc.addTrack(screenTrack, screenStream);
-        });
+        if (peerConnection.current) {
+            peerConnection.current.addTrack(screenTrack, screenStream);
+        }
     };
 
     const removeScreenTrack = (screenTrack) => {
-        peerConnections.current.forEach((pc) => {
-            const sender = pc
-                .getSenders()
-                .find((s) => s.track === screenTrack);
-
-            if (sender) {
-                pc.removeTrack(sender);
-            }
-        });
+        const pc = peerConnection.current;
+        if (!pc) return;
+        const sender = pc.getSenders().find((s) => s.track === screenTrack);
+        if (sender) pc.removeTrack(sender);
     };
 
     return {
@@ -292,7 +255,7 @@ export default function useWebRTC(stream, onIceCandidate) {
         handleOffer,
         handleAnswer,
         handleIceCandidate,
-        remoteStreams,
+        remoteStream,
         removePeerConnection
     };
 }

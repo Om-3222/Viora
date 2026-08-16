@@ -41,12 +41,42 @@ export default function registerMeetingEvents(io, socket) {
                 { $addToSet: { participants: userId } }
             );
 
+            const meetingDoc = await Meeting.findOne({ meetingCode: meetingCode.toUpperCase() });
+            if (!meetingDoc) {
+                socket.emit("meeting:error", { message: "Meeting not found" });
+                return;
+            }
+
+            const isHost = meetingDoc.host.toString() === userId.toString();
+
             // if meeting does not exist, create a new meeting map
             if (!meetingParticipants.has(meetingCode)) {
                 meetingParticipants.set(meetingCode, new Map());
             }
 
             const participants = meetingParticipants.get(meetingCode);
+
+            // If the user is not the host, check if the host is already in the room
+            if (!isHost) {
+                let hostInRoom = false;
+                for (const pUserId of participants.keys()) {
+                    if (pUserId === meetingDoc.host.toString()) {
+                        hostInRoom = true;
+                        break;
+                    }
+                }
+
+                if (!hostInRoom) {
+                    socket.emit("meeting:error", { message: "Please wait for the host to join first." });
+                    return;
+                }
+            }
+
+            // Limit room to exactly 2 participants for a 1-to-1 P2P video call setup
+            if (participants.size >= 2 && !participants.has(userId)) {
+                socket.emit("meeting:error", { message: "Meeting is full. Only 2 participants allowed." });
+                return;
+            }
 
             // Add participant to the meeting map
             participants.set(userId, {
@@ -101,6 +131,7 @@ export default function registerMeetingEvents(io, socket) {
         }
     });
 
+    // WebRTC Signaling: Forward offer to the specific peer
     socket.on("webrtc:offer", ({ targetSocketId, offer }) => {
         io.to(targetSocketId).emit("webrtc:offer", {
             senderSocketId: socket.id,
@@ -108,6 +139,7 @@ export default function registerMeetingEvents(io, socket) {
         })
     })
 
+    // WebRTC Signaling: Forward answer back to the original offerer
     socket.on("webrtc:answer", ({ targetSocketId, answer }) => {
         io.to(targetSocketId).emit("webrtc:answer", {
             senderSocketId: socket.id,
@@ -115,6 +147,7 @@ export default function registerMeetingEvents(io, socket) {
         });
     })
 
+    // WebRTC Signaling: Forward ICE candidates to help establish the P2P connection
     socket.on("webrtc:ice", ({ targetSocketId, candidate }) => {
         console.log("Forwarding ICE to: ", targetSocketId);
 
@@ -124,6 +157,7 @@ export default function registerMeetingEvents(io, socket) {
         });
     })
 
+    // Handle user disconnecting from the meeting or closing the tab
     socket.on("disconnect", () => {
         const meetingCode = socketMeetings.get(socket.id);
 
@@ -145,6 +179,7 @@ export default function registerMeetingEvents(io, socket) {
 
         socketMeetings.delete(socket.id);
 
+        // Notify remaining participants (if any) that this user has left
         if (disconnectedParticipant) {
             io.to(meetingCode).emit("meeting:participant-left", {
                 socketId: disconnectedParticipant.socketId,
@@ -167,6 +202,7 @@ export default function registerMeetingEvents(io, socket) {
         }
     });
 
+    // Handle media state changes (toggling mic/camera/screen)
     socket.on("media:update", ({ mic, camera, screen }) => {
         const meetingCode = socketMeetings.get(socket.id);
 

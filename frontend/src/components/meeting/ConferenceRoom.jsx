@@ -13,7 +13,7 @@ export default function ConferenceRoom({
     meeting,
     participants,
     currentUser,
-    remoteStreams,
+    remoteStream,
     localStream,
     isMicOn,
     isCameraOn,
@@ -46,45 +46,32 @@ export default function ConferenceRoom({
         container.scrollTop = container.scrollHeight;
     }, [messages, isChatOpen]);
 
-    //     [
-    //     {
-    //         userId,
-    //         socketId,
-    //         name,
-    //         stream,
-    //     },
-
-    //     ...
-    // ]
-
     const gridTiles = [];
 
-    // remote participants
-    participants
-        .filter((participant) => participant.userId !== currentUser?._id)
-        .forEach((participant) => {
-            const streams = remoteStreams.get(participant.socketId);
+    // Extract the single remote participant from the participants list
+    const remoteParticipant = participants.find((p) => p.userId !== currentUser?._id);
 
-            // Camera video tile
-            gridTiles.push({
-                key: `${participant.socketId}-camera`,
-                stream: streams?.cameraStream,
-                name: participant.name,
-                mic: participant.mic,
-                camera: participant.camera
-            });
-
-            // Screen share video tile
-            if (participant.screen && streams?.screenStream) {
-                gridTiles.push({
-                    key: `${participant.socketId}-screen`,
-                    stream: streams.screenStream,
-                    name: `${participant.name}'s Screen`,
-                    mic: false,
-                    camera: true
-                });
-            }
+    if (remoteParticipant) {
+        // Camera video tile
+        gridTiles.push({
+            key: `${remoteParticipant.socketId}-camera`,
+            stream: remoteStream?.cameraStream,
+            name: remoteParticipant.name,
+            mic: remoteParticipant.mic,
+            camera: remoteParticipant.camera
         });
+
+        // Screen share video tile
+        if (remoteParticipant.screen && remoteStream?.screenStream) {
+            gridTiles.push({
+                key: `${remoteParticipant.socketId}-screen`,
+                stream: remoteStream.screenStream,
+                name: `${remoteParticipant.name}'s Screen`,
+                mic: false,
+                camera: true
+            });
+        }
+    }
 
     // Local screen share tile
     if (isScreenSharing && localScreenStream) {
@@ -97,6 +84,7 @@ export default function ConferenceRoom({
         });
     }
 
+    // Determine if any tile is currently active in fullscreen mode
     const isFullscreenActive = fullscreenTileKey && gridTiles.some(t => t.key === fullscreenTileKey);
     const displayedTiles = isFullscreenActive
         ? gridTiles.filter(t => t.key === fullscreenTileKey)
@@ -119,11 +107,7 @@ export default function ConferenceRoom({
                             <div
                                 className={`grid h-full gap-4 ${displayedTiles.length === 1
                                     ? "grid-cols-1"
-                                    : displayedTiles.length === 2
-                                        ? "grid-cols-1 md:grid-cols-2"
-                                        : displayedTiles.length <= 4
-                                            ? "grid-cols-2"
-                                            : "grid-cols-2 md:grid-cols-3"
+                                    : "grid-cols-1 md:grid-cols-2"
                                     }`}
                             >
                                 {displayedTiles.map((tile) => (
