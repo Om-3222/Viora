@@ -1,13 +1,26 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export default function useWebRTC(stream, onIceCandidate) {
     const [remoteStream, setRemoteStream] = useState({ cameraStream: null, screenStream: null });
 
     const peerConnection = useRef(null);
     const iceCandidateQueue = useRef([]);
+    // Keep refs to always access latest values inside callbacks without stale closures
+    const streamRef = useRef(stream);
+    const onIceCandidateRef = useRef(onIceCandidate);
+    // Flag to trigger renegotiation when stream arrives after peer connection was created without tracks
+    const [needsRenegotiation, setNeedsRenegotiation] = useState(false);
+
+    useEffect(() => {
+        streamRef.current = stream;
+    }, [stream]);
+
+    useEffect(() => {
+        onIceCandidateRef.current = onIceCandidate;
+    }, [onIceCandidate]);
 
     // Cleans up the WebRTC connection when leaving a meeting or ending a call
-    const removePeerConnection = () => {
+    const removePeerConnection = useCallback(() => {
         const pc = peerConnection.current;
 
         if (!pc) return;
@@ -22,26 +35,31 @@ export default function useWebRTC(stream, onIceCandidate) {
         setRemoteStream({ cameraStream: null, screenStream: null });
 
         console.log("Peerconnection removed");
-    };
+    }, []);
 
-    const addLocalTracks = (pc) => {
-        if (!stream) return;
+    const addLocalTracks = useCallback((pc) => {
+        const currentStream = streamRef.current;
+        if (!currentStream) return false;
 
-        stream.getTracks().forEach((track) => {
+        let tracksAdded = false;
+
+        currentStream.getTracks().forEach((track) => {
             const alreadyAdded = pc
                 .getSenders()
                 .some((sender) => sender.track === track);
 
             if (!alreadyAdded) {
-                pc.addTrack(track, stream);
+                pc.addTrack(track, currentStream);
+                tracksAdded = true;
             }
         });
 
         console.log(
             "addLocalTracks called",
             {
-                hasStream: !!stream,
-                trackCount: stream?.getTracks().length,
+                hasStream: !!currentStream,
+                trackCount: currentStream?.getTracks().length,
+                tracksAdded,
             }
         );
 
@@ -53,10 +71,12 @@ export default function useWebRTC(stream, onIceCandidate) {
                 readyState: sender.track?.readyState,
             }))
         );
-    };
+
+        return tracksAdded;
+    }, []);
 
     // Initializes a new RTCPeerConnection for the target peer
-    const createPeerConnection = (targetSocketId) => {
+    const createPeerConnection = useCallback((targetSocketId) => {
         const pc = new RTCPeerConnection({
             iceServers: [
                 {
@@ -69,7 +89,12 @@ export default function useWebRTC(stream, onIceCandidate) {
 
         console.log("peer connection created for: ", targetSocketId);
 
-        addLocalTracks(pc);
+        const hadTracks = addLocalTracks(pc);
+
+        // If stream wasn't available yet, flag for renegotiation when it arrives
+        if (!hadTracks) {
+            console.log("No local tracks added — will renegotiate when stream is ready");
+        }
 
         pc.onicecandidate = (event) => {
             if (!event.candidate) {
@@ -79,7 +104,21 @@ export default function useWebRTC(stream, onIceCandidate) {
 
             console.log("ICE Candidate generated");
 
-            onIceCandidate?.(targetSocketId, event.candidate);
+            onIceCandidateRef.current?.(targetSocketId, event.candidate);
+        };
+
+        // Handle renegotiation requests (triggered when tracks are added post-negotiation)
+        pc.onnegotiationneeded = async () => {
+            console.log("Negotiation needed — creating new offer for renegotiation");
+            try {
+                if (pc.signalingState !== "stable") {
+                    console.warn("Skipping renegotiation, state:", pc.signalingState);
+                    return;
+                }
+                setNeedsRenegotiation(true);
+            } catch (error) {
+                console.error("Renegotiation error:", error);
+            }
         };
 
         // Fired when the remote peer adds tracks (e.g. video, audio, screen share)
@@ -107,13 +146,24 @@ export default function useWebRTC(stream, onIceCandidate) {
         };
 
         return pc;
-    };
+    }, [addLocalTracks]);
 
+    // When stream becomes available and a peer connection already exists,
+    // add tracks and trigger renegotiation so remote peer receives media
     useEffect(() => {
         if (!stream || !peerConnection.current) return;
-        addLocalTracks(peerConnection.current);
-        console.log("Added tracks to existing peer connection");
-    }, [stream]);
+
+        const pc = peerConnection.current;
+
+        // Only add tracks if the connection isn't closed
+        if (pc.connectionState === "closed") return;
+
+        const hadNewTracks = addLocalTracks(pc);
+
+        if (hadNewTracks) {
+            console.log("Added tracks to existing peer connection — renegotiation will be triggered by onnegotiationneeded");
+        }
+    }, [stream, addLocalTracks]);
 
     useEffect(() => {
         return () => {
@@ -142,7 +192,7 @@ export default function useWebRTC(stream, onIceCandidate) {
     };
 
     // Initiates the connection by creating and sending an offer to a peer
-    const createOffer = async (targetSocketId) => {
+    const createOffer = useCallback(async (targetSocketId) => {
         let pc = peerConnection.current;
 
         if (!pc) {
@@ -165,14 +215,22 @@ export default function useWebRTC(stream, onIceCandidate) {
         console.log("State after local offer: ", pc.signalingState);
 
         return offer;
-    }
+    }, [createPeerConnection]);
 
     // Handles an incoming offer by setting the remote description and creating an answer
-    const handleOffer = async (targetSocketId, offer) => {
+    const handleOffer = useCallback(async (targetSocketId, offer) => {
         let pc = peerConnection.current;
 
         if (!pc) {
             pc = createPeerConnection(targetSocketId);
+        }
+
+        // If we receive a new offer on an existing connection (renegotiation),
+        // handle the state properly
+        if (pc.signalingState !== "stable" && pc.signalingState !== "have-remote-offer") {
+            console.warn("Received offer in unexpected state:", pc.signalingState, "— resetting");
+            // Rollback any pending local description
+            await pc.setLocalDescription({ type: "rollback" });
         }
 
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
@@ -185,10 +243,10 @@ export default function useWebRTC(stream, onIceCandidate) {
         console.log("State after local answer: ", pc.signalingState);
 
         return answer;
-    }
+    }, [createPeerConnection]);
 
     // Finalizes the connection process by setting the remote description from the answer
-    const handleAnswer = async (answer) => {
+    const handleAnswer = useCallback(async (answer) => {
         const pc = peerConnection.current;
 
         if (!pc) {
@@ -206,10 +264,10 @@ export default function useWebRTC(stream, onIceCandidate) {
         await flushIceCandidateQueue(pc);
 
         console.log("Remote answer applied");
-    };
+    }, []);
 
     // Handles incoming ICE candidates to help peers find the best route
-    const handleIceCandidate = async (candidate) => {
+    const handleIceCandidate = useCallback(async (candidate) => {
         const pc = peerConnection.current;
         const rtcCandidate = new RTCIceCandidate(candidate);
 
@@ -225,27 +283,27 @@ export default function useWebRTC(stream, onIceCandidate) {
         } catch (error) {
             console.error("Error adding ICE candidate:", error);
         }
-    };
+    }, []);
 
-    const replaceVideoTrack = (newTrack) => {
+    const replaceVideoTrack = useCallback((newTrack) => {
         const pc = peerConnection.current;
         if (!pc) return;
         const sender = pc.getSenders().find((s) => s.track?.kind === "video");
         if (sender) sender.replaceTrack(newTrack);
-    }
+    }, []);
 
-    const addScreenTrack = (screenTrack, screenStream) => {
+    const addScreenTrack = useCallback((screenTrack, screenStream) => {
         if (peerConnection.current) {
             peerConnection.current.addTrack(screenTrack, screenStream);
         }
-    };
+    }, []);
 
-    const removeScreenTrack = (screenTrack) => {
+    const removeScreenTrack = useCallback((screenTrack) => {
         const pc = peerConnection.current;
         if (!pc) return;
         const sender = pc.getSenders().find((s) => s.track === screenTrack);
         if (sender) pc.removeTrack(sender);
-    };
+    }, []);
 
     return {
         replaceVideoTrack,
@@ -256,6 +314,8 @@ export default function useWebRTC(stream, onIceCandidate) {
         handleAnswer,
         handleIceCandidate,
         remoteStream,
-        removePeerConnection
+        removePeerConnection,
+        needsRenegotiation,
+        setNeedsRenegotiation,
     };
 }

@@ -15,11 +15,8 @@ Map {
 }
 */
 
-// Map {
-//   "socketA" => "ABC-DEF-GHI",
-//   "socketB" => "ABC-DEF-GHI",
-//   "socketC" => "ABC-DEF-GHI"
-// }
+// Maps a socketId to its meetingCode for quick lookup on disconnect
+// Map { "socketA" => "ABC-DEF-GHI", "socketB" => "ABC-DEF-GHI" }
 
 const meetingParticipants = new Map();
 
@@ -58,15 +55,7 @@ export default function registerMeetingEvents(io, socket) {
 
             // If the user is not the host, check if the host is already in the room
             if (!isHost) {
-                let hostInRoom = false;
-                for (const pUserId of participants.keys()) {
-                    if (pUserId === meetingDoc.host.toString()) {
-                        hostInRoom = true;
-                        break;
-                    }
-                }
-
-                if (!hostInRoom) {
+                if (!participants.has(meetingDoc.host.toString())) {
                     socket.emit("meeting:error", { message: "Please wait for the host to join first." });
                     return;
                 }
@@ -115,13 +104,10 @@ export default function registerMeetingEvents(io, socket) {
 
             socket.emit("meeting:chat-history", previousMessages);
 
-            // if more than 1 participant, send ready event to new participant
+            // If the host is already in the room, notify them to initiate the WebRTC offer
             if (participants.size > 1) {
-                // send to all in room except the sender (the new participant)
-                // to create offer for each existing participant
-
                 socket.to(meetingCode).emit("meeting:ready", {
-                    joinedSocketId: socket.id,      // sender socket id
+                    joinedSocketId: socket.id,
                 });
             }
 
